@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turtle Crossing Game</title>
+    <style>
+        canvas {
+            border: none;
+        }
+        #refreshButton {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, 50px);
+            width: 50px;
+            height: 50px;
+            background-color: #4CAF50;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            color: white;
+        }
+        #refreshButton:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+    <button id="refreshButton">↻</button>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const refreshButton = document.getElementById('refreshButton');
+
+        const CANVAS_WIDTH = 600;
+        const CANVAS_HEIGHT = 600;
+        const COLORS = ["red", "orange", "yellow", "green", "blue", "purple"];
+        const STARTING_MOVE_DISTANCE = 1;
+        const MOVE_INCREMENT = 0.5;
+        const PLAYER_SIZE = 20;
+        const CAR_WIDTH = 40;
+        const CAR_HEIGHT = 20;
+        const BUFFER_ZONE = 60;
+
+        const MOTIVATIONAL_QUOTES = [
+            "Koki, you're amazing! Keep playing and show everyone your skills!",
+            "Well played, Koki! You're getting better every time!",
+            "Koki, your moves are incredible! Keep it up!",
+            "You're so cool, Koki! Keep pushing forward!",
+            "Fantastic job, Koki! Don't stop now!",
+            "Koki, you're a natural! Keep on playing!",
+            "Amazing effort, Koki! You're on fire!",
+            "Koki, you're unstoppable! Keep going!",
+            "You're doing great, Koki! Keep it up and you'll win for sure!",
+            "Koki, you're a star! Keep playing and having fun!"
+        ];
+
+        let level = 1;
+        let gameIsOn = true;
+        let player;
+        let cars = [];
+        let carSpeed = STARTING_MOVE_DISTANCE;
+        let quoteDisplayTime = 0;
+        let currentQuote = '';
+
+        class Player {
+            constructor() {
+                this.x = CANVAS_WIDTH / 2;
+                this.y = CANVAS_HEIGHT - PLAYER_SIZE;
+                this.size = PLAYER_SIZE;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(-Math.PI / 2);  // Rotate to face upwards
+
+                // Draw turtle body
+                ctx.fillStyle = 'darkgreen';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, this.size / 2, this.size / 3, 0, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Draw head
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.ellipse(this.size / 2, 0, this.size / 6, this.size / 8, 0, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Draw legs
+                ctx.fillStyle = 'green';
+                for (let i = 0; i < 4; i++) {
+                    const angle = (i * Math.PI / 2) + Math.PI / 4;
+                    const x = (this.size / 3) * Math.cos(angle);
+                    const y = (this.size / 3) * Math.sin(angle);
+                    ctx.beginPath();
+                    ctx.ellipse(x, y, this.size / 10, this.size / 6, 0, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+
+            move() {
+                if (this.y > PLAYER_SIZE) {
+                    this.y -= 10;
+                }
+            }
+
+            isAtFinishLine() {
+                return this.y <= PLAYER_SIZE;
+            }
+
+            goToStart() {
+                this.y = CANVAS_HEIGHT - PLAYER_SIZE;
+            }
+        }
+
+        class Car {
+            constructor() {
+                this.x = CANVAS_WIDTH;
+                this.y = this.getValidYPosition();
+                this.width = CAR_WIDTH;
+                this.height = CAR_HEIGHT;
+                this.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            }
+
+            getValidYPosition() {
+                let y;
+                do {
+                    y = Math.random() * (CANVAS_HEIGHT - CAR_HEIGHT);
+                } while (y < BUFFER_ZONE || y > CANVAS_HEIGHT - BUFFER_ZONE - CAR_HEIGHT);
+                return y;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            move() {
+                this.x -= carSpeed;
+            }
+        }
+
+        function createCar() {
+            if (Math.random() < 0.035) {
+                cars.push(new Car());
+            }
+        }
+
+        function moveCars() {
+            cars.forEach(car => car.move());
+            cars = cars.filter(car => car.x + car.width > 0);
+        }
+
+        function checkCollision() {
+            const playerRadius = PLAYER_SIZE / 2;
+            return cars.some(car => {
+                const closestX = Math.max(car.x, Math.min(player.x, car.x + car.width));
+                const closestY = Math.max(car.y, Math.min(player.y, car.y + car.height));
+                const distanceX = player.x - closestX;
+                const distanceY = player.y - closestY;
+                const distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+                return distanceSquared <= (playerRadius * playerRadius);
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Courier';
+            ctx.fillText(`Level: ${level}`, 10, 30);
+        }
+
+        function gameOver() {
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Courier';
+            ctx.fillText('GAME OVER', CANVAS_WIDTH / 2 - 70, CANVAS_HEIGHT / 2);
+            gameIsOn = false;
+            refreshButton.style.display = 'block';
+        }
+
+        function drawBufferZones() {
+            ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, BUFFER_ZONE);
+            ctx.fillRect(0, CANVAS_HEIGHT - BUFFER_ZONE, CANVAS_WIDTH, BUFFER_ZONE);
+        }
+
+        function getRandomQuote() {
+            return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+        }
+
+        function drawQuote() {
+            if (quoteDisplayTime > 0) {
+                ctx.fillStyle = 'purple';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'right';
+                
+                const maxWidth = CANVAS_WIDTH - 40; // 40px margin from the right edge
+                const words = currentQuote.split(' ');
+                let lines = [];
+                let currentLine = words[0];
+
+                for (let i = 1; i < words.length; i++) {
+                    const testLine = currentLine + ' ' + words[i];
+                    const metrics = ctx.measureText(testLine);
+                    if (metrics.width > maxWidth) {
+                        lines.push(currentLine);
+                        currentLine = words[i];
+                    } else {
+                        currentLine = testLine;
+                    }
+                }
+                lines.push(currentLine);
+
+                // Draw each line of the quote
+                for (let i = 0; i < lines.length; i++) {
+                    ctx.fillText(lines[i], CANVAS_WIDTH - 20, 20 + (i * 20));
+                }
+
+                ctx.textAlign = 'left';
+                quoteDisplayTime--;
+            }
+        }
+
+        function update() {
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            drawBufferZones();
+            player.draw();
+            cars.forEach(car => car.draw());
+            drawScore();
+            drawQuote();
+
+            createCar();
+            moveCars();
+
+            if (checkCollision()) {
+                gameOver();
+            }
+
+            if (player.isAtFinishLine()) {
+                player.goToStart();
+                level++;
+                carSpeed += MOVE_INCREMENT;
+                if (level % 5 === 0) {
+                    currentQuote = getRandomQuote();
+                    quoteDisplayTime = 180; // Display for 3 seconds (60 frames per second)
+                }
+            }
+
+            if (gameIsOn) {
+                requestAnimationFrame(update);
+            }
+        }
+
+        function init() {
+            level = 1;
+            gameIsOn = true;
+            cars = [];
+            carSpeed = STARTING_MOVE_DISTANCE;
+            player = new Player();
+            quoteDisplayTime = 0;
+            currentQuote = '';
+            refreshButton.style.display = 'none';
+            update();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' && gameIsOn) {
+                player.move();
+            }
+        });
+
+        refreshButton.addEventListener('click', init);
+
+        init();
+    </script>
+</body>
+</html>
